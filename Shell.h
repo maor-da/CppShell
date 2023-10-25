@@ -8,16 +8,14 @@ class Program
 public:
 	Program(std::string_view name, std::string_view desc = "");
 
-	inline void attach(CLI::App_p parent)
-	{
-		parent->add_subcommand(app);
-	}
+	void add_program(std::shared_ptr<Program> prog);
 	virtual CLI::App_p init() = 0;
 
 protected:
-	virtual void exec() = 0;
-
+	std::vector<std::shared_ptr<Program>> programs;
 	CLI::App_p app;
+
+	virtual void exec() = 0;
 };
 
 class Shell

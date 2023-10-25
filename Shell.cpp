@@ -1,4 +1,6 @@
 #include "Shell.h"
+#include "Shell.h"
+#include "Shell.h"
 
 #include <CLI/CLI.hpp>
 #include <memory>
@@ -57,6 +59,15 @@ Program::Program(std::string_view name, std::string_view desc)
 
 	AddHelp(app);
 	app->callback([this]() { exec(); });
+}
+
+void Program::add_program(std::shared_ptr<Program> prog)
+{
+	if (prog == nullptr) {
+		return;
+	}
+	app->add_subcommand(prog->init());
+	programs.push_back(prog);
 }
 
 Shell::Shell(CLI::App_p app) : app(app)
