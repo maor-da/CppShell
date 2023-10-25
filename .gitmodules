@@ -1,0 +1,6 @@
+[submodule "CLI11"]
+	path = CLI11
+	url = git@github.com:CLIUtils/CLI11.git
+[submodule "rang"]
+	path = rang
+	url = git@github.com:agauniyal/rang.git
