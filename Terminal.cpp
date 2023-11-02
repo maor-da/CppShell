@@ -4,12 +4,14 @@
 #include <rang.hpp>
 #include <sstream>
 
+#pragma execution_character_set("utf-8")
+
 std::string CreatePromptLine(std::string_view appName, std::string_view cwd, std::string_view host)
 {
 	std::stringstream ss;
 	ss << rang::style::bold << rang::fg::green << "┌──(" << rang::fg::blue << appName << '@' << host
 	   << rang::fg::green << ")-[" << rang::fg::reset << cwd << rang::fg::green << "]" << std::endl
-	   << "└─$ " << rang::fg::reset << rang::style::reset;
+	   << rang::fg::reset << rang::style::reset;
 
 	return ss.str();
 }

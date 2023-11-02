@@ -22,14 +22,13 @@ class Shell
 {
 public:
 	Shell(CLI::App_p app);
-	Shell(std::string_view name, std::string_view desc);
+	// Shell(std::string_view name, std::string_view desc);
 	Shell(std::shared_ptr<Program> prog);
 
-	void add_program(std::shared_ptr<Program> prog)
-	{
-		app->add_subcommand(prog->init());
-		programs.push_back(prog);
-	}
+
+	void add_shell_commands();
+
+	void add_program(std::shared_ptr<Program> prog);
 
 	void run();
 
