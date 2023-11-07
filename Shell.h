@@ -25,8 +25,8 @@ public:
 	// Shell(std::string_view name, std::string_view desc);
 	Shell(std::shared_ptr<Program> prog);
 
-
 	void add_shell_commands();
+	void update_autocomplete();
 
 	void add_program(std::shared_ptr<Program> prog);
 
@@ -37,5 +37,6 @@ private:
 	std::string promptLine;
 	bool exit = false;
 	static bool setupTerminal;
+	std::set<std::string> completions;
 	std::vector<std::shared_ptr<Program>> programs;
 };
