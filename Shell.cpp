@@ -61,7 +61,7 @@ Program::Program(std::string_view name, std::string_view desc)
 	app->preparse_callback([this, guard](size_t size) {
 		if (size == 0 && *guard == false) {
 			*guard = true;
-			Shell{app}.run();
+			Shell{*this}.run();
 			*guard = false;
 			throw CLI::Success();
 		}
@@ -70,30 +70,44 @@ Program::Program(std::string_view name, std::string_view desc)
 	app->callback([this]() { exec(); });
 
 	app->formatter(std::make_shared<ShellFormatter>());
+
+	app->add_subcommand("help", "Print this help message and exit")
+		->ignore_case()
+		->preparse_callback([app = app](size_t size) {
+			std::cout << app->get_formatter()->make_help(
+				app.get(), app->get_name(), CLI::AppFormatMode::Normal);
+			throw CLI::Success();
+		})
+		->alias("?")
+		->group("");
+	completions.insert("help");
+	completions.insert("?");
+
+	completions.insert(builtins.begin(), builtins.end());
 }
 
 void Program::add_program(std::shared_ptr<Program> prog)
 {
-	if (prog == nullptr) {
-		return;
+	if (prog == nullptr || prog->app == nullptr) {
+		throw std::runtime_error("Bad program");
 	}
-	app->add_subcommand(prog->init());
+	app->add_subcommand(prog->app);
+	prog->init();
 	programs.push_back(prog);
+
+	completions.insert(prog->app->get_name());
 }
 
 // execute when added and everytime it runs
-Shell::Shell(CLI::App_p app) : app(app)
+Shell::Shell(Program& prog) : program(prog), app(prog.app)
 {
 	if (app == nullptr) {
-		return;
+		throw std::runtime_error("App wasn't initialized");
 	}
 
 	if (!setupTerminal) {
 		throw std::runtime_error("Terminal setup has failed");
 	}
-
-	promptLine =
-		CreatePromptLine(app->get_name(), std::filesystem::current_path().string(), GetHostname().c_str());
 
 	app->parse_complete_callback([]() {
 		// std::cout << std::endl;
@@ -110,47 +124,41 @@ Shell::Shell(CLI::App_p app) : app(app)
 // }
 
 // executed only once, the base shell
-Shell::Shell(std::shared_ptr<Program> prog) : Shell(prog->init())
+Shell::Shell(MainProgram& prog) : Shell(static_cast<Program&>(prog))
 {
-	app->preparse_callback([](size_t size) {});
-	programs.push_back(prog);
+	prog.init();
+
+	program.completions.insert(builtins.begin(), builtins.end());
 
 	linenoise::SetMultiLine(true);
 	linenoise::SetHistoryMaxLen(40);
 	linenoise::LoadHistory(historyFile.c_str());
 }
 
+Shell::~Shell()
+{
+	remove_shell_commands();
+}
+
 void Shell::add_shell_commands()
 {
-	if (app->get_subcommands([](CLI::App* p) { return p->get_name() == "exit"; }).empty()) {
-		app->add_subcommand("exit")
-			->ignore_case()
-			->preparse_callback([this](size_t size) {
-				exit = true;
-				throw CLI::Success();
-			})
-			->alias("quit")
-			->group("");
-		builtins.insert("exit");
-		builtins.insert("quit");
+	try {
+		app->remove_subcommand(app->get_subcommand("exit"));
+	} catch (const std::exception&) {
 	}
 
-	if (app->get_subcommands([](CLI::App* p) { return p->get_name() == "help"; }).empty()) {
-		app->add_subcommand("help", "Print this help message and exit")
-			->ignore_case()
-			->preparse_callback([app = app](size_t size) {
-				std::cout << app->get_formatter()->make_help(
-					app.get(), app->get_name(), CLI::AppFormatMode::Normal);
-				throw CLI::Success();
-			})
-			->alias("?")
-			->group("");
-		builtins.insert("help");
-		builtins.insert("?");
-	}
+	app->add_subcommand("exit")
+		->ignore_case()
+		->preparse_callback([this](size_t size) {  // this require to update every time
+			exit = true;
+			throw CLI::Success();
+		})
+		->alias("quit")
+		->group("");
+	builtins.insert("exit");
+	builtins.insert("quit");
 
 	if (app->get_subcommands([](CLI::App* p) { return p->get_name() == "cd"; }).empty()) {
-		static std::string path;
 		app->add_subcommand("cd", "Change directory")
 			->ignore_case()
 			->group("")
@@ -170,15 +178,23 @@ void Shell::add_shell_commands()
 	}
 }
 
+void Shell::remove_shell_commands()
+{
+	try {
+		app->remove_subcommand(app->get_subcommand("exit"));
+	} catch (const std::exception&) {
+	}
+
+	try {
+		app->remove_subcommand(app->get_subcommand("cd"));
+	} catch (const std::exception&) {
+	}
+}
+
+
+
 void Shell::update_autocomplete()
 {
-	completions.insert(builtins.begin(), builtins.end());
-
-	app->get_subcommands([this](CLI::App* p) {
-		completions.insert(p->get_name());
-		return false;
-	});
-
 	linenoise::SetCompletionCallback([this](std::string_view editBuffer, std::vector<std::string>& options) {
 		if (editBuffer.starts_with("cd ")) {
 			std::string arg		 = ".";
@@ -225,41 +241,39 @@ void Shell::update_autocomplete()
 			return;
 		}
 
-		auto start = completions.lower_bound(editBuffer.data());
-		for (auto it = start; it != completions.end(); it++) {
-			if (it->starts_with(editBuffer)) {
-				options.push_back(*it);
-			} else {
-				break;
-			}
-		}
-	});
-}
+		//for ()
 
-void Shell::add_program(std::shared_ptr<Program> prog)
-{
-	auto sub_app = prog->init();
-	app->add_subcommand(sub_app);
-	programs.push_back(prog);
-	completions.insert(sub_app->get_name());
+			// auto start = completions.lower_bound(editBuffer.data());
+			for (auto it = program.completions.lower_bound(editBuffer.data());
+				 it != program.completions.end();
+				 it++) {
+				if (it->starts_with(editBuffer)) {
+					options.push_back(*it);
+				} else {
+					break;
+				}
+			}
+	});
 }
 
 void Shell::run()
 {
-	std::string line;
-
 	while (!exit) {
+		std::string line;
+
 		promptLine = CreatePromptLine(
 			app->get_name(), std::filesystem::current_path().string(), GetHostname().c_str());
 		std::cout << std::endl;
 		std::cout << rang::bg::reset << promptLine;
+
+		update_autocomplete();
 		linenoise::Readline(promptStart.c_str(), line);
 		if (line.empty()) {
 			continue;
 		}
 		linenoise::AddHistory(line.c_str());
 
-		if (completions.contains(line)) {
+		if (program.completions.contains(line)) {
 			// deal with positional args
 			line = "++ " + line;
 		}
@@ -280,6 +294,5 @@ void Shell::run()
 		}
 
 		linenoise::SaveHistory(historyFile.c_str());
-		update_autocomplete();
 	}
 }

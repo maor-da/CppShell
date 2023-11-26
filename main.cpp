@@ -10,11 +10,9 @@ public:
 
 	Sub(std::string_view name, std::string_view desc) : base_t(name, desc) {}
 
-	virtual CLI::App_p init() override
+	virtual void init() override
 	{
 		app->add_option("--val1", val1, "val1 desc")->ignore_case();
-
-		return app;
 	}
 
 private:
@@ -33,11 +31,9 @@ public:
 
 	Sub2() : base_t("sub2") {}
 
-	virtual CLI::App_p init() override
+	virtual void init() override
 	{
 		app->add_option("--val1", val1, "val1 desc")->ignore_case()->required();
-
-		return app;
 	}
 
 private:
@@ -49,18 +45,22 @@ private:
 	}
 };
 
-class Main : public Program
+class Main : public MainProgram
 {
 public:
-	using base_t = Program;
+	using base_t = MainProgram;
 
 	Main() : base_t("main") {}
 
-	virtual CLI::App_p init() override
+	virtual void init() override
 	{
-		app->add_option("--val1", val1, "val1 desc")->ignore_case()->required();
+		auto sub1 = std::make_shared<Sub>("add", "adding value");
+		auto sub2 = std::make_shared<Sub2>();
 
-		return app;
+		add_program(sub1);
+		add_program(sub2);
+
+		app->add_option("--val1", val1, "val1 desc")->ignore_case()->required();
 	}
 
 private:
@@ -75,13 +75,8 @@ private:
 int main(int argc, char** argv)
 {
 	// Shell app("Base", "The top most app");
-	Shell app(std::make_shared<Main>());
-
-	auto sub1 = std::make_shared<Sub>("add", "adding value");
-	auto sub2 = std::make_shared<Sub2>();
-
-	app.add_program(sub1);
-	app.add_program(sub2);
+	Main main;
+	Shell app(main);
 
 	app.run();
 
